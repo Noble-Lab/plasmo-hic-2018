@@ -1,0 +1,160 @@
+\documentclass[11pt]{amsart}
+\usepackage[margin=1in]{geometry}                % See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   % ... or a4paper or a5paper or ... 
+%\geometry{landscape}                % Activate for for rotated page geometry
+\usepackage[parfill]{parskip}    % Activate to begin paragraphs with an empty line rather than an indent
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{epstopdf}
+\usepackage{hyperref}
+\pagestyle{plain}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+
+\title{Extended computational methods for "Changes in genome organization of parasite-specific gene families during the Plasmodium transmission stages"}
+\author{Evelien M. Bunnik, Kate B. Cook, Nelle Varoquaux, Gayani Batugedara, Jacques Prudhomme, Lirong Shi, Chiara Andolina, Leila S. Ross, Declan Brady, David A. Fidock, Francois Nosten, Rita Tewari, Photini Sinnis, Ferhat Ay, Jean-Philippe Vert, William Stafford Noble, and Karine G. Le Roch}
+%\date{}                                           % Activate to display a given date or no date
+
+\begin{document}
+\maketitle
+
+This document is intended to be used along with the supplementary methods already provided which describe the mathematical basis for the analyses performed, and focuses on specific scripts and parameters used for each step of analysis.
+
+\section{Trimming and mapping}
+
+\textbf{Input:} fastq files of reads
+
+\textbf{Output:} pairs files 
+
+\textbf{Source files:} \texttt{generate\_binned\_midpoints.py} and \texttt{step2\_GenerateFilterPairedAlignments.sh}
+
+Sequenced reads ranged from 50 to 75 bp, and we trimmed them prior to mapping from the 3$'$ end to a total length of 40bp using cutadapt v1.9.dev2 with Python 2.7.3. Cutadapt parameters were: \texttt{-m 20 -u -N}, where \texttt{N} is the number of bases to remove to get 40bp.
+
+We mapped trimmed reads to the \textit{P. falciparum} (PlasmoDB v9.0) and \textit{P. vivax} (PlasmoDB v28) genomes using BWA v 0.7.3 with the command \texttt{bwa aln -t 8}.
+
+We preprocessed the \textit{P. falciparum} and \textit{P. vivax} genomes with \texttt{generate\_binned\_midpoints.py} to generate 10kb bins for each chromosome. We produced text files of paired mapped reads from the BWA output using \texttt{step2\_GenerateFilterPairedAlignments.sh}.
+
+\section{Mappability}
+
+\textbf{Input:} \textit{P. falciparum} and \textit{P. vivax} genomes (.fa)
+
+\textbf{Output:} mappability files 
+
+\textbf{Source files:} \texttt{process\_genome\_for\_biases\_combinedFrags-flankRE.py}
+
+The \textit{P. falciparum} and \textit{P. vivax} genomes were pre-processed using GEMTools release 20100419 to calculate 50bp mappability at each base. The commands used were:
+\\
+\texttt{gem-do-index --complement -i <genome fasta file> -o <prefix>}
+\\
+and
+\\
+\texttt{gem-mappability -I <prefix> -o mappability-50 -l 50 --output-line-width 500}.
+
+We calculated the mappability of each 10kb region of the genome by averaging the mappability from -400 to +400 bp around restriction sites that fall within that 10kb region, using
+\\
+\texttt{process\_genome\_for\_biases\_combinedFrags-flankRE.py}
+
+
+\section{Binning, subsampling and normalization}
+
+\textbf{Input:} pairs files
+
+\textbf{Output:} raw and normalized contact count matrices 
+
+\textbf{Source files:} \texttt{generate\_binned\_midpoints.py}, \texttt{step2\_get-contactCounts-atFixedWindowSize}, and \texttt{step2\_get-subsampled-contactCounts-atFixedWindowSize}
+
+We binned the \textit{P. falciparum} and \textit{P. vivax} genomes into 10kb bins using \texttt{generate\_binned\_midpoints.py} and assigned read pairs to the bin to which they mapped using
+\\
+\texttt{step2\_get-contactCounts-atFixedWindowSize}. This produced ``raw'' contact count matrices $ \{ C_{ij} \} $.
+
+We performed all comparisons between time points (e.g. ACCOST or ratio plots) on data that was subsampled to the smaller read count using \texttt{step2\_get-subsampled-contactCounts-atFixedWindowSize}.
+
+We normalized Hi-C matrices using iterative correction and eigenvalue decomposition (ICE) as implemented in \texttt{iced} (\url{https://github.com/NelleV/iced}). This produced ICE biases for each 10kb bin, as well as a normalized contact count matrix, where $C_{ij}^{norm} = \frac{C_{ij}^{raw}}{\beta_i\beta_j}$
+
+\section{Restriction site binning}
+
+\textbf{Input:} pairs files
+
+\textbf{Output:} raw contact count matrices binned by restriction site
+
+\textbf{Source files:} \texttt{step1\_findCutSites} and \texttt{step4\_assign\_cleanedPairs\_toREsites}
+
+For certain analyses (e.g. The zoomed in view of the chr14 domain boundary) we used variable sized bins bordered by MboI restriction sites, which tend to be smaller than the 10kb bins used otherwise. In this case, we determined MboI sites using \texttt{step1\_findCutSites} and assigned read pairs to restriction fragments using \texttt{step4\_assign\_cleanedPairs\_toREsites}.
+
+\section{Determining significant contacts}
+
+\textbf{Input:} raw contact count matrices, mappability files, ICE biases
+
+\textbf{Output:} fit-hi-c p-value and q-value matrices 
+
+\textbf{Source files:} \texttt{fit-hic-withInters-outputexp.py}
+
+We used a version of \texttt{fit-hi-c} that has been modified to output expected contacts to identify significant contacts between bins and calculate the expected contact count as a function of genomic distance. The parameters used were
+\\
+\texttt{fit-hic-withInters-outputexp.py -l <name> -f <mappability file> -i <raw counts> -L 0 -U -1 -b 100 -m 1 -p 2 -r -l -t <ICE biases> --usebinning}.
+
+\section{Significant co-localization}
+
+\textbf{Input:} normalized contact count matrices, list of gene loci
+
+\textbf{Output:} single p-value 
+
+\textbf{Source files:} \texttt{contact\_counts\_to\_matrix.py}, \texttt{colocalization\_test.py} and \texttt{centromeres\_all.tab}.
+
+We used the Witten-Noble permutation test to test for significant co-localization of genes, as implemented in \texttt{colocalization\_test.py}. Contact counts were reformatted prior to co-localization testing using \texttt{contact\_counts\_to\_matrix.py}. Centromere locations are in \texttt{centromeres\_all.tab}.
+
+\section{Differential contact count statistics}
+
+\textbf{Input:} two normalized contact count matrices, chromosome sizes file, mappability file
+
+\textbf{Output:} p-value matrices and FDR corrected p-values (q-values)
+
+\textbf{Source files:} ACCOST source can be found on github (\url{https://github.com/cookkate/ACCOST}), \texttt{get\_FDR\_from\_lnpvals.py}
+
+We calculating ACCOST p-values, representing the probability that a difference at least as extreme between normalized contact counts could be observed, using the following command:
+\\
+\texttt{differential\_counts\_directional.py <mappability file> <precalculated genomic distances> <precalculated genomic distances (reversed)> <raw counts A> <raw counts B> <ICE biases A> <ICE biases B> <output prefix> 1 0.25}.
+
+The precalculated genomic distances are optional and will be calculated if not provided, they correspond to the mapping from $i$ and $j$ bin values to genomic distances, and vice versa (for the reversed case). The last two parameters are a minimum p-value to target (1, not used) and a minimum mappability threshold (0.25).
+
+FDR-corrected p-values were calculated using
+\\
+\texttt{get\_FDR\_from\_lnpvals.py <pvalue matrix> <output filename> <chromosome sizes file>}.
+
+\section{Comparing matrices using ratios}
+
+\textbf{Input:} two normalized contact count matrices, fit-hi-c output
+
+\textbf{Output:} ratio matrices
+
+\textbf{Source files:} \texttt{get\_corrected\_ratio.py}
+
+We corrected raw ratios for the effect of genomic distance by calculating the expected number of contact counts at a given distance $d = | i-j |$ using \texttt{fit-hi-c} (denoted below as $f(d)$). We calculated the ratio of observed normalized contact counts over the expected counts at each bin pair and report the ratio of those ratios, $R_{ij}$:
+
+\begin{align}
+R_{ij} &= \frac{C^A_{ij} + 1 / f^A(|i-j|) + 1}{C^B_{ij} + 1 / f^B(|i-j|) + 1 }
+\end{align}
+
+The +1 construction accounts for the possibility of zeros in the denominator. We calculated corrected ratios using \texttt{get\_corrected\_ratio.py}
+
+
+%\section{Inferring 3D models}
+
+%\textbf{Input:} raw matrices, ICE biases
+
+%\textbf{Output:} 3D coordinates 
+
+%\textbf{Source files:} Pastis can be found at \url{https://github.com/hiclib/pastis}
+
+%We inferred 3D coordinates using Pastis with the following options: \texttt{TODO}
+
+%\section{Kernel canonical correlation analysis}
+
+%\textbf{Input:} raw matrices, ICE biases, gene loci, gene cluster assignments
+
+%\textbf{Output:} gene expression profiles
+
+%\textbf{Source files:} TODO
+
+%TODO
+
+\end{document}  

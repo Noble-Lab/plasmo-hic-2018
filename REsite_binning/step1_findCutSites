@@ -1,0 +1,50 @@
+#!/bin/bash -ex
+
+BINDIR=$1
+OUTDIR=$2
+org=$3
+ref=$4
+CHROMSDIR=$5
+lastChr=$6
+
+mkdir -p $OUTDIR
+
+for i in `seq 1 $lastChr`; do
+
+    RE1name=MboI
+    RE1=GATC # MboI
+ 
+    jobfile=$ref-$RE1name-chr$i.job
+    echo "#!/bin/bash -ex" > $jobfile
+    echo "#$ -cwd" >> $jobfile
+    echo "#$ -l longjob=TRUE" >> $jobfile
+    echo "#$ -l mem_requested=8G" >> $jobfile
+    echo "#$ -l rhel=6" >> $jobfile
+    echo "#$ -j y" >> $jobfile
+    echo "source ~/.bashrc" >> $jobfile
+    echo hostname >> $jobfile
+    echo "pypy $BINDIR/cutSiteFinder.py $RE1 $CHROMSDIR/chr$i.fa $OUTDIR/$ref-$RE1name-chr$i" >> $jobfile 
+	chmod +x $jobfile
+    #qsub $jobfile
+	./$jobfile
+
+    # now for HindIII
+    RE1name=HindIII
+    RE1=AAGCTT # HindIII   
+
+    jobfile=$ref-$RE1name-chr$i.job
+    echo "#!/bin/bash -ex" > $jobfile
+    echo "#$ -cwd" >> $jobfile
+    echo "#$ -l longjob=TRUE" >> $jobfile
+    echo "#$ -l mem_requested=8G" >> $jobfile
+    echo "#$ -l rhel=6" >> $jobfile
+    echo "#$ -j y" >> $jobfile
+    echo "source ~/.bashrc" >> $jobfile
+    echo hostname >> $jobfile
+    echo "pypy $BINDIR/cutSiteFinder.py $RE1 $CHROMSDIR/chr$i.fa $OUTDIR/$ref-$RE1name-chr$i" >> $jobfile 
+	chmod +x $jobfile
+    #qsub $jobfile
+	./$jobfile
+
+done
+

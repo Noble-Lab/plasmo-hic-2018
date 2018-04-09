@@ -1,0 +1,47 @@
+#!/bin/bash -ex
+
+PROJDIR=$1
+LIBRARYID=$2
+
+CLEANEDDIR=${PROJDIR}/data/cleanedPairs/$LIBRARYID
+FRAGASSIGNED=${PROJDIR}/data/cleanedFragPairs/$LIBRARYID
+mkdir -p $FRAGASSIGNED
+REfile=$3
+outdir=$4
+distSum=$5
+
+jobfile=${LIBRARYID}_step4.job
+
+echo "#!/bin/bash -ex" > $jobfile
+echo "#$ -cwd" >> $jobfile
+echo "#$ -l h_vmem=8G" >> $jobfile
+echo "#$ -l rhel=6" >> $jobfile
+echo "#$ -j y" >> $jobfile
+echo "source ~/.bashrc" >> $jobfile
+echo hostname >> $jobfile
+
+echo "" >> $jobfile
+#echo "pypy $PROJDIR/bin/assign_cleanedPairs_toREsites.py <(zcat $CLEANEDDIR/L?.gz) $REfile $FRAGASSIGNED" >> $jobfile
+echo "" >> $jobfile
+echo "mkdir -p $outdir/interactionCounts/beforeICE/combineFrags1" >> $jobfile
+echo "" >> $jobfile
+
+echo "cat $FRAGASSIGNED/L? | awk '\$NF<d {print \$3,\$4,\$8,\$9}' d=$distSum | sort | uniq -c | awk '{print \$2\"\\t\"\$3\"\\t\"\$4\"\\t\"\$5\"\\t\"\$1}' | sort -k1,1 -k2,2n -k3,3 -k4,4n >  $outdir/interactionCounts/beforeICE/combineFrags1/$LIBRARYID" >> $jobfile
+echo "" >> $jobfile
+echo "cat $FRAGASSIGNED/L? | awk '\$NF<d {print \$3,\$4; print \$8,\$9}' d=$distSum | sort | uniq -c | awk '{print \$2\"-\"\$3,\$1}' | sort -k1,1 > $outdir/fragmentMappability/beforeICE/combineFrags1/${LIBRARYID}.temp2" >> $jobfile
+echo "" >> $jobfile
+##echo "cat ~/public_html/proj/2013publishedHiCdata/data/REstartSites/pfal3D7-pfal3D7.MboI | awk '{print \$1\"-\"\$2,\$0}' | sort -k1,1 > $outdir/fragmentMappability/beforeICE/combineFrags1/${LIBRARYID}.temp1" >> $jobfile
+echo "cat ~/public_html/proj/2013publishedHiCdata/data/REstartSites/pfal3D7-pfal3D7.MboI | awk '{print \$1\"-\"\$2,\$2+int((\$3-\$2+1)/2),\$0}' | sort -k1,1 > $outdir/fragmentMappability/beforeICE/combineFrags1/${LIBRARYID}.temp1" >> $jobfile
+echo "" >> $jobfile
+echo "join -a 1 $outdir/fragmentMappability/beforeICE/combineFrags1/${LIBRARYID}.temp1 $outdir/fragmentMappability/beforeICE/combineFrags1/${LIBRARYID}.temp2 | awk '{m=0; c=0; if(NF==6) {m=1; c=\$6} print \$3\"\\t\"\$2\"\\t\"\$4\"\\t\"c\"\\t\"m}' | sort -k1,1 -k3,3n >  $outdir/fragmentMappability/beforeICE/combineFrags1/$LIBRARYID" >> $jobfile
+echo "" >> $jobfile
+echo "rm -rf $outdir/fragmentMappability/beforeICE/combineFrags1/${LIBRARYID}.temp?" >> $jobfile
+echo "" >> $jobfile
+echo "gzip $outdir/fragmentMappability/beforeICE/combineFrags1/$LIBRARYID" >> $jobfile
+echo "" >> $jobfile
+echo "gzip $outdir/interactionCounts/beforeICE/combineFrags1/$LIBRARYID" >> $jobfile
+echo "" >> $jobfile
+
+chmod +x $jobfile
+qsub -l h_rt=7200 $jobfile
+
